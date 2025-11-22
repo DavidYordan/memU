@@ -9,11 +9,13 @@ import httpx
 
 from memu.llm.backends.base import HTTPBackend
 from memu.llm.backends.openai import OpenAIHTTPBackend
+from memu.llm.backends.deepseek import DeepSeekHTTPBackend
 
 logger = logging.getLogger(__name__)
 
 HTTP_BACKENDS: dict[str, Callable[[], HTTPBackend]] = {
     OpenAIHTTPBackend.name: OpenAIHTTPBackend,
+    DeepSeekHTTPBackend.name: DeepSeekHTTPBackend,
 }
 
 
@@ -136,6 +138,8 @@ class HTTPLLMClient:
             Transcribed text
         """
         try:
+            if self.provider != "openai":
+                raise NotImplementedError("audio_transcriptions_unavailable_for_provider")
             # Prepare multipart form data
             with open(audio_path, "rb") as audio_file:
                 files = {"file": (Path(audio_path).name, audio_file, "application/octet-stream")}

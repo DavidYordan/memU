@@ -136,7 +136,11 @@ class MemoryService:
             caption_text = caption.strip()
             if caption_text:
                 res.caption = caption_text
-                res.embedding = (await self.openai.embed([caption_text]))[0]
+                try:
+                    emb = (await self.openai.embed([caption_text]))[0]
+                except Exception:
+                    emb = None
+                res.embedding = emb
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -299,12 +303,19 @@ class MemoryService:
         self, *, resource_id: str, structured_entries: list[tuple[MemoryType, str, list[str]]]
     ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
         summary_payloads = [content for _, content, _ in structured_entries]
-        item_embeddings = await self.openai.embed(summary_payloads) if summary_payloads else []
+        item_embeddings = []
+        if summary_payloads:
+            try:
+                item_embeddings = await self.openai.embed(summary_payloads)
+            except Exception:
+                item_embeddings = [None] * len(summary_payloads)
         items: list[MemoryItem] = []
         rels: list[CategoryItem] = []
         category_memory_updates: dict[str, list[str]] = {}
 
-        for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
+        for idx, entry in enumerate(structured_entries):
+            memory_type, summary_text, cat_names = entry
+            emb = item_embeddings[idx] if idx < len(item_embeddings) else None
             item = self.store.create_item(
                 resource_id=resource_id,
                 memory_type=memory_type,
@@ -347,7 +358,10 @@ class MemoryService:
             self._categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self.openai.embed(cat_texts)
+        try:
+            cat_vecs = await self.openai.embed(cat_texts)
+        except Exception:
+            cat_vecs = [None] * len(cat_texts)
         self._category_ids = []
         self._category_name_to_id = {}
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
@@ -508,11 +522,13 @@ class MemoryService:
             frame_path = VideoFrameExtractor.extract_middle_frame(local_path)
 
             try:
-                # Call Vision API with extracted frame
                 logger.info(f"Analyzing video frame with Vision API: {frame_path}")
                 processed = await self.openai.vision(prompt=template, image_path=frame_path, system_prompt=None)
                 description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
                 return description, caption, None
+            except Exception:
+                logger.exception("Vision analysis failed for video frame %s", frame_path)
+                return None, None, None
             finally:
                 # Clean up temporary frame file
                 import pathlib
@@ -540,10 +556,13 @@ class MemoryService:
         Returns:
             Tuple of (description, caption, None)
         """
-        # Call Vision API with image
-        processed = await self.openai.vision(prompt=template, image_path=local_path, system_prompt=None)
-        description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-        return description, caption, None
+        try:
+            processed = await self.openai.vision(prompt=template, image_path=local_path, system_prompt=None)
+            description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
+            return description, caption, None
+        except Exception:
+            logger.exception("Vision analysis failed for image %s", local_path)
+            return None, None, None
 
     async def _preprocess_document(
         self, text: str, template: str
@@ -867,7 +886,10 @@ class MemoryService:
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
-        summary_embeddings = await self.openai.embed(summary_texts)
+        try:
+            summary_embeddings = await self.openai.embed(summary_texts)
+        except Exception:
+            return [], {}
         corpus = [(cid, emb) for (cid, _), emb in zip(entries, summary_embeddings, strict=True)]
         hits = cosine_topk(query_vec, corpus, k=top_k)
         summary_lookup = dict(entries)

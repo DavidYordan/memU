@@ -61,8 +61,8 @@ test = [
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
-[project.scripts]
-memu-server = "memu.server.cli:main"
+#[project.scripts]
+# 直接启动 memu-server/app.py
 
 [tool.mypy]
 files = ["src", "tests"]
