@@ -18,7 +18,7 @@ class InMemoryStore:
         self.resources[rid] = res
         return res
 
-    def get_or_create_category(self, *, name: str, description: str, embedding: list[float]) -> MemoryCategory:
+    def get_or_create_category(self, *, name: str, description: str, embedding: list[float] | None) -> MemoryCategory:
         for c in self.categories.values():
             if c.name == name:
                 if not c.embedding:
@@ -32,7 +32,7 @@ class InMemoryStore:
         return cat
 
     def create_item(
-        self, *, resource_id: str, memory_type: MemoryType, summary: str, embedding: list[float]
+        self, *, resource_id: str, memory_type: MemoryType, summary: str, embedding: list[float] | None
     ) -> MemoryItem:
         mid = str(uuid.uuid4())
         it = MemoryItem(

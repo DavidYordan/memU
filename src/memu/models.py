@@ -21,7 +21,7 @@ class MemoryItem(BaseModel):
     resource_id: str
     memory_type: MemoryType
     summary: str
-    embedding: list[float]
+    embedding: list[float] | None = None
 
 
 class MemoryCategory(BaseModel):
