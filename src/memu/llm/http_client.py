@@ -34,6 +34,7 @@ class HTTPLLMClient:
         chat_api_key: str | None = None,
         embed_base_url: str | None = None,
         embed_api_key: str | None = None,
+        embed_dimensions: int | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
@@ -54,6 +55,7 @@ class HTTPLLMClient:
         self.chat_api_key = (chat_api_key or self.api_key)
         self.embed_base_url = (embed_base_url or self.base_url).rstrip("/")
         self.embed_api_key = (embed_api_key or self.api_key)
+        self.embed_dimensions = embed_dimensions
 
     async def summarize(self, text: str, max_tokens: int | None = None, system_prompt: str | None = None) -> str:
         payload = self.backend.build_summary_payload(
@@ -118,6 +120,8 @@ class HTTPLLMClient:
 
     async def embed(self, inputs: list[str]) -> list[list[float]]:
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
+        if self.embed_dimensions is not None:
+            payload["dimensions"] = int(self.embed_dimensions)
         async with httpx.AsyncClient(base_url=self.embed_base_url, timeout=self.timeout) as client:
             resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers_for(self.embed_api_key))
             resp.raise_for_status()

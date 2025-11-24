@@ -62,6 +62,7 @@ class MemoryService:
             "chat_api_key": self.llm_config.chat_api_key,
             "embed_base_url": self.llm_config.embed_base_url,
             "embed_api_key": self.llm_config.embed_api_key,
+            "embed_dimensions": self.llm_config.embed_dimensions,
         }
         if backend == "sdk":
             from memu.llm.openai_sdk import OpenAISDKClient

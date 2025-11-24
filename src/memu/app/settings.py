@@ -59,6 +59,10 @@ class LLMConfig(BaseModel):
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary', 'embeddings'/'embed').",
     )
+    embed_dimensions: int | None = Field(
+        default=None,
+        description="Optional embeddings output dimension (e.g., 1536).",
+    )
 
 
 class BlobConfig(BaseModel):
