@@ -134,6 +134,57 @@ class MemoryService:
             "relations": [r.model_dump() for r in rels],
         }
 
+    async def memorize_text(self, *, text: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
+        import uuid
+        import pathlib
+        await self._ensure_categories_ready()
+        cat_ids: list[str] = list(self._category_ids)
+
+        fname = f"resource_{uuid.uuid4().hex}.txt"
+        fpath = str(pathlib.Path(self.fs.base) / fname)
+        try:
+            pathlib.Path(fpath).write_text(text, encoding="utf-8")
+        except Exception:
+            fpath = str(pathlib.Path(self.fs.base) / f"resource_{uuid.uuid4().hex}.txt")
+            pathlib.Path(fpath).write_text(text, encoding="utf-8")
+
+        processed_text, caption, segments = await self._preprocess_resource_url(local_path=fpath, text=text, modality=modality)
+
+        res = await self._create_resource_with_caption(
+            resource_url=fpath,
+            modality=modality,
+            local_path=fpath,
+            caption=caption,
+        )
+
+        memory_types = self._resolve_memory_types()
+        base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
+        categories_prompt_str = self._category_prompt_str
+
+        structured_entries = await self._generate_structured_entries(
+            resource_url=fpath,
+            modality=modality,
+            memory_types=memory_types,
+            text=processed_text,
+            base_prompt=base_prompt,
+            categories_prompt_str=categories_prompt_str,
+            segments=segments,
+        )
+
+        items, rels, category_memory_updates = await self._persist_memory_items(
+            resource_id=res.id,
+            structured_entries=structured_entries,
+        )
+
+        await self._update_category_summaries(category_memory_updates)
+
+        return {
+            "resource": self._model_dump_without_embeddings(res),
+            "items": [self._model_dump_without_embeddings(item) for item in items],
+            "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+            "relations": [r.model_dump() for r in rels],
+        }
+
     async def _fetch_and_preprocess_resource(
         self, resource_url: str, modality: str
     ) -> tuple[str, str | None, str | None, list[dict[str, int]] | None]:
