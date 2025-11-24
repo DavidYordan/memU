@@ -15,7 +15,12 @@ class PostgresClient:
         self.embed_dim = embed_dim
 
     def initialize(self):
-        self.pool = asyncio.run(asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=5))
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        self.pool = loop.run_until_complete(asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=5))
 
     async def close(self):
         if self.pool:
