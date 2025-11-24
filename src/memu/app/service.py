@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig, RetrieveConfig
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore
+from memu.memory.pg_store import PostgresClient, PersistentStoreProxy
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import CATEGORY_SUMMARY_PROMPT
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
@@ -48,6 +49,8 @@ class MemoryService:
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
         self.fs = LocalFS(self.blob_config.resources_dir)
         self.store = InMemoryStore()
+        self._db = None
+        self._store_proxy = None
         backend = self.llm_config.client_backend
         self.openai: Any
         client_kwargs: dict[str, Any] = {
@@ -76,6 +79,18 @@ class MemoryService:
         self._category_name_to_id: dict[str, str] = {}
         self._categories_ready = not bool(self.category_configs)
         self._category_init_task: asyncio.Task | None = None
+
+        if isinstance(self.database_config, DatabaseConfig) and self.database_config.provider == "postgres":
+            dsn = getattr(self.database_config, "dsn", "")
+            dim = int(getattr(self.database_config, "embed_dim", 1536))
+            client = PostgresClient(dsn=dsn, embed_dim=dim)
+            client.initialize()
+            self._db = client
+            self._store_proxy = PersistentStoreProxy(self.store, self._db)
+            asyncio.run(self._store_proxy.load_all())
+        else:
+            self._store_proxy = PersistentStoreProxy(self.store, None)
+
         self._start_category_initialization()
 
     async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
@@ -131,7 +146,7 @@ class MemoryService:
     async def _create_resource_with_caption(
         self, *, resource_url: str, modality: str, local_path: str, caption: str | None
     ) -> Resource:
-        res = self.store.create_resource(url=resource_url, modality=modality, local_path=local_path)
+        res = self._store_proxy.create_resource(url=resource_url, modality=modality, local_path=local_path)
         if caption:
             caption_text = caption.strip()
             if caption_text:
@@ -141,6 +156,7 @@ class MemoryService:
                 except Exception:
                     emb = None
                 res.embedding = emb
+        await self._store_proxy.persist_resource(res)
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -316,7 +332,7 @@ class MemoryService:
         for idx, entry in enumerate(structured_entries):
             memory_type, summary_text, cat_names = entry
             emb = item_embeddings[idx] if idx < len(item_embeddings) else None
-            item = self.store.create_item(
+            item = self._store_proxy.create_item(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary_text,
@@ -325,9 +341,13 @@ class MemoryService:
             items.append(item)
             mapped_cat_ids = self._map_category_names_to_ids(cat_names)
             for cid in mapped_cat_ids:
-                rels.append(self.store.link_item_category(item.id, cid))
+                rels.append(self._store_proxy.link_item_category(item.id, cid))
                 category_memory_updates.setdefault(cid, []).append(summary_text)
 
+        for item in items:
+            await self._store_proxy.persist_item(item)
+        for rel in rels:
+            await self._store_proxy.persist_relation(rel)
         return items, rels, category_memory_updates
 
     def _start_category_initialization(self) -> None:
@@ -367,9 +387,10 @@ class MemoryService:
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
             name = (cfg.get("name") or "").strip() or "Untitled"
             description = (cfg.get("description") or "").strip()
-            cat = self.store.get_or_create_category(name=name, description=description, embedding=vec)
+            cat = self._store_proxy.get_or_create_category(name=name, description=description, embedding=vec)
             self._category_ids.append(cat.id)
             self._category_name_to_id[name.lower()] = cat.id
+            await self._store_proxy.persist_category(cat)
         self._categories_ready = True
 
     @staticmethod
@@ -658,6 +679,7 @@ class MemoryService:
             if not cat:
                 continue
             cat.summary = summary.strip()
+            await self._store_proxy.persist_category(cat)
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
         conversation = self._extract_tag_content(raw, "conversation")

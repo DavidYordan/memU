@@ -64,6 +64,8 @@ class BlobConfig(BaseModel):
 
 class DatabaseConfig(BaseModel):
     provider: str = Field(default="memory")
+    dsn: str = Field(default="")
+    embed_dim: int = Field(default=1536)
 
 
 class RetrieveConfig(BaseModel):
