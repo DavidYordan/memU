@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from typing import Any
 
@@ -29,6 +30,14 @@ class PostgresClient:
         await self.ensure_pool()
         if self.pool is None:
             return
+        emb_value = None
+        if isinstance(res.embedding, list):
+            try:
+                emb_value = json.dumps(res.embedding, ensure_ascii=False)
+            except Exception:
+                emb_value = None
+        else:
+            emb_value = res.embedding
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
@@ -48,7 +57,7 @@ class PostgresClient:
                 res.local_path,
                 res.modality,
                 res.caption,
-                res.embedding,
+                emb_value,
                 None,
                 self.embed_dim,
             )
@@ -57,6 +66,14 @@ class PostgresClient:
         await self.ensure_pool()
         if self.pool is None:
             return
+        emb_value = None
+        if isinstance(cat.embedding, list):
+            try:
+                emb_value = json.dumps(cat.embedding, ensure_ascii=False)
+            except Exception:
+                emb_value = None
+        else:
+            emb_value = cat.embedding
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
@@ -74,7 +91,7 @@ class PostgresClient:
                 cat.name,
                 cat.description,
                 cat.summary,
-                cat.embedding,
+                emb_value,
                 None,
                 self.embed_dim,
             )
@@ -83,6 +100,14 @@ class PostgresClient:
         await self.ensure_pool()
         if self.pool is None:
             return
+        emb_value = None
+        if isinstance(item.embedding, list):
+            try:
+                emb_value = json.dumps(item.embedding, ensure_ascii=False)
+            except Exception:
+                emb_value = None
+        else:
+            emb_value = item.embedding
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
@@ -94,7 +119,7 @@ class PostgresClient:
                 """,
                 item.id,
                 item.summary,
-                item.embedding,
+                emb_value,
             )
 
     async def upsert_relation(self, rel: CategoryItem):
@@ -120,33 +145,51 @@ class PostgresClient:
         async with self.pool.acquire() as conn:
             cats = await conn.fetch("SELECT id, name, description, summary, embedding FROM categories")
             for r in cats:
+                emb = r[4]
+                if isinstance(emb, str):
+                    try:
+                        emb = json.loads(emb)
+                    except Exception:
+                        emb = None
                 cat = MemoryCategory(
                     id=str(r[0]),
                     name=str(r[1] or ""),
                     description=str(r[2] or ""),
                     summary=str(r[3]) if r[3] is not None else None,
-                    embedding=list(r[4]) if r[4] is not None else None,
+                    embedding=list(emb) if isinstance(emb, list) else None,
                 )
                 store.categories[cat.id] = cat
             ress = await conn.fetch("SELECT id, url, local_path, modality, caption, embedding FROM resources")
             for r in ress:
+                emb = r[5]
+                if isinstance(emb, str):
+                    try:
+                        emb = json.loads(emb)
+                    except Exception:
+                        emb = None
                 res = Resource(
                     id=str(r[0]),
                     url=str(r[1] or ""),
                     local_path=str(r[2] or ""),
                     modality=str(r[3] or ""),
                     caption=str(r[4]) if r[4] is not None else None,
-                    embedding=list(r[5]) if r[5] is not None else None,
+                    embedding=list(emb) if isinstance(emb, list) else None,
                 )
                 store.resources[res.id] = res
             its = await conn.fetch("SELECT id, summary, embedding FROM items")
             for r in its:
+                emb = r[2]
+                if isinstance(emb, str):
+                    try:
+                        emb = json.loads(emb)
+                    except Exception:
+                        emb = None
                 item = MemoryItem(
                     id=str(r[0]),
                     resource_id="",
                     memory_type="knowledge",
                     summary=str(r[1] or ""),
-                    embedding=list(r[2]) if r[2] is not None else None,
+                    embedding=list(emb) if isinstance(emb, list) else None,
                 )
                 store.items[item.id] = item
             rels = await conn.fetch("SELECT item_id, category_id FROM relations")
