@@ -272,12 +272,15 @@ class MemoryService:
             )
             if segment_entries:
                 return segment_entries
-        return await self._generate_entries_from_text(
-            resource_text=resource_text,
-            memory_types=memory_types,
-            base_prompt=base_prompt,
-            categories_prompt_str=categories_prompt_str,
-        )
+        try:
+            return await self._generate_entries_from_text(
+                resource_text=resource_text,
+                memory_types=memory_types,
+                base_prompt=base_prompt,
+                categories_prompt_str=categories_prompt_str,
+            )
+        except Exception:
+            return [self._build_no_result_fallback(memory_types[0], "", modality)]
 
     async def _generate_entries_for_segments(
         self,
@@ -645,18 +648,24 @@ class MemoryService:
     ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
         """Preprocess document data - condense and extract caption"""
         prompt = template.format(document_text=self._escape_prompt_value(text))
-        processed = await self.openai.summarize(prompt, system_prompt=None)
-        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return processed_content or text, caption, None
+        try:
+            processed = await self.openai.summarize(prompt, system_prompt=None)
+            processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
+            return processed_content or text, caption, None
+        except Exception:
+            return text, None, None
 
     async def _preprocess_audio(
         self, text: str, template: str
     ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
         """Preprocess audio data - format transcription and extract caption"""
         prompt = template.format(transcription=self._escape_prompt_value(text))
-        processed = await self.openai.summarize(prompt, system_prompt=None)
-        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return processed_content or text, caption, None
+        try:
+            processed = await self.openai.summarize(prompt, system_prompt=None)
+            processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
+            return processed_content or text, caption, None
+        except Exception:
+            return text, None, None
 
     def _format_categories_for_prompt(self, categories: list[dict[str, str]]) -> str:
         if not categories:
