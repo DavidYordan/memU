@@ -30,6 +30,10 @@ class HTTPLLMClient:
         provider: str = "openai",
         endpoint_overrides: dict[str, str] | None = None,
         timeout: int = 60,
+        chat_base_url: str | None = None,
+        chat_api_key: str | None = None,
+        embed_base_url: str | None = None,
+        embed_api_key: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
@@ -46,13 +50,17 @@ class HTTPLLMClient:
             or self.backend.embedding_endpoint
         )
         self.timeout = timeout
+        self.chat_base_url = (chat_base_url or self.base_url).rstrip("/")
+        self.chat_api_key = (chat_api_key or self.api_key)
+        self.embed_base_url = (embed_base_url or self.base_url).rstrip("/")
+        self.embed_api_key = (embed_api_key or self.api_key)
 
     async def summarize(self, text: str, max_tokens: int | None = None, system_prompt: str | None = None) -> str:
         payload = self.backend.build_summary_payload(
             text=text, system_prompt=system_prompt, chat_model=self.chat_model, max_tokens=max_tokens
         )
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
+        async with httpx.AsyncClient(base_url=self.chat_base_url, timeout=self.timeout) as client:
+            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers_for(self.chat_api_key))
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM summarize response: %s", data)
@@ -101,8 +109,8 @@ class HTTPLLMClient:
             max_tokens=max_tokens,
         )
 
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
+        async with httpx.AsyncClient(base_url=self.chat_base_url, timeout=self.timeout) as client:
+            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers_for(self.chat_api_key))
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM vision response: %s", data)
@@ -110,8 +118,8 @@ class HTTPLLMClient:
 
     async def embed(self, inputs: list[str]) -> list[list[float]]:
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
+        async with httpx.AsyncClient(base_url=self.embed_base_url, timeout=self.timeout) as client:
+            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers_for(self.embed_api_key))
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM embedding response: %s", data)
@@ -174,8 +182,8 @@ class HTTPLLMClient:
         else:
             return result or ""
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}"}
+    def _headers_for(self, key: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {key}"}
 
     def _load_backend(self, provider: str) -> HTTPBackend:
         factory = HTTP_BACKENDS.get(provider)

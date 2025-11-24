@@ -47,6 +47,10 @@ class LLMConfig(BaseModel):
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
     embed_model: str = Field(default="text-embedding-3-small")
+    chat_base_url: str = Field(default="https://api.deepseek.com")
+    chat_api_key: str = Field(default="DEEPSEEK_API_KEY")
+    embed_base_url: str = Field(default="https://open.bigmodel.cn/api/paas/v4")
+    embed_api_key: str = Field(default="ZHIPU_API_KEY")
     client_backend: str = Field(
         default="sdk",
         description="Which LLM client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
