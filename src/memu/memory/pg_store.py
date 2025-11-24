@@ -14,13 +14,23 @@ class PostgresClient:
         self.dsn = dsn
         self.pool = None
         self.embed_dim = embed_dim
+        self._loop = None
 
     def initialize(self):
         return None
 
     async def ensure_pool(self):
+        current_loop = asyncio.get_running_loop()
         if self.pool is None:
             self.pool = await asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=5)
+            self._loop = current_loop
+        elif self._loop is not current_loop:
+            try:
+                await self.pool.close()
+            except Exception:
+                pass
+            self.pool = await asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=5)
+            self._loop = current_loop
 
     async def close(self):
         if self.pool:

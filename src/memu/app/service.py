@@ -417,8 +417,7 @@ class MemoryService:
             loop = None
         if loop:
             self._category_init_task = loop.create_task(self._initialize_categories())
-        else:
-            asyncio.run(self._initialize_categories())
+        # 若当前不存在运行中的事件循环，则延迟到后续请求上下文中执行
 
     async def _ensure_categories_ready(self) -> None:
         if self._categories_ready:
