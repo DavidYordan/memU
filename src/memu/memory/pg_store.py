@@ -15,18 +15,18 @@ class PostgresClient:
         self.embed_dim = embed_dim
 
     def initialize(self):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        self.pool = loop.run_until_complete(asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=5))
+        return None
+
+    async def ensure_pool(self):
+        if self.pool is None:
+            self.pool = await asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=5)
 
     async def close(self):
         if self.pool:
             await self.pool.close()
 
     async def upsert_resource(self, res: Resource):
+        await self.ensure_pool()
         if self.pool is None:
             return
         async with self.pool.acquire() as conn:
@@ -54,6 +54,7 @@ class PostgresClient:
             )
 
     async def upsert_category(self, cat: MemoryCategory):
+        await self.ensure_pool()
         if self.pool is None:
             return
         async with self.pool.acquire() as conn:
@@ -79,6 +80,7 @@ class PostgresClient:
             )
 
     async def upsert_item(self, item: MemoryItem):
+        await self.ensure_pool()
         if self.pool is None:
             return
         async with self.pool.acquire() as conn:
@@ -96,6 +98,7 @@ class PostgresClient:
             )
 
     async def upsert_relation(self, rel: CategoryItem):
+        await self.ensure_pool()
         if self.pool is None:
             return
         async with self.pool.acquire() as conn:
@@ -111,6 +114,7 @@ class PostgresClient:
             )
 
     async def load_into_store(self, store: InMemoryStore):
+        await self.ensure_pool()
         if self.pool is None:
             return False
         async with self.pool.acquire() as conn:

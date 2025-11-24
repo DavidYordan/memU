@@ -89,10 +89,9 @@ class MemoryService:
             dsn = getattr(self.database_config, "dsn", "")
             dim = int(getattr(self.database_config, "embed_dim", 1536))
             client = PostgresClient(dsn=dsn, embed_dim=dim)
-            client.initialize()
             self._db = client
             self._store_proxy = PersistentStoreProxy(self.store, self._db)
-            asyncio.run(self._store_proxy.load_all())
+            # 延迟加载数据库内容到应用运行期事件循环中
         else:
             self._store_proxy = PersistentStoreProxy(self.store, None)
 
